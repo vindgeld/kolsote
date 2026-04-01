@@ -1625,7 +1625,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 audio.volume = 1;
                 audio.play();
             }
-// triggerGlobalHitCounter();
+ triggerGlobalHitCounter();
             // 2. Change button text to show progress
             startBtn.innerText = "ACCESS GRANTED";
             startBtn.style.borderColor = "var(--status-safe)";
