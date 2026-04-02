@@ -54,15 +54,17 @@
                       
                       <button class="btn-icon" onclick="exportToExcel()">EXPORT (.xlsx)</button>
                       <input type="file" id="import-excel" accept=".xlsx" style="display:none" onchange="importFromExcel(event)">
-                      <br><button class="btn-icon" style="border: 1px solid #b71c1c" onclick="clearAppCache()">Clear All Data</button>
+                      <br>
+                      <div class="hit-counter">
+                         <span id="global-hit-count">...</span>
+                      </div>
+                      <button class="btn-icon" style="border: 1px solid #b71c1c" onclick="clearAppCache()">Clear All Data</button>
                   </div>
             </div>
          </header>
         <div id="project-list"></div>
         <div class="pad"><div class="pic"></div><div class="title"><a href="https://www.instagram.com/budibaik/" target="_blank">made by<br>@budibaik</a></div></div>
-        <div class="hit-counter">
-          <span id="global-hit-count">...</span>
-        </div>
+        
          </div>
     <!-- showProjectsPage() -->
     <div id="page-cues" class="page">
