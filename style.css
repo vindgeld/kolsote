@@ -208,5 +208,5 @@ a:active,a:hover{background-color:transparent;color: #4EDFD7}
 .glitch-btn {background: transparent;border: 1px solid var(--accent-primary);color: var(--accent-primary);padding: 10px 25px;font-family: var(--font-mono);font-size: 0.9rem;letter-spacing: 3px;cursor: pointer;margin-top: 20px;position: relative;transition: all 0.3s ease;opacity: 0;animation: fade-in-up 0.5s forwards 1s;}
 .glitch-btn:hover {background: var(--accent-primary);color: var(--bg-base);box-shadow: 0 0 20px var(--accent-primary);}
 @keyframes fade-in-up {from { opacity: 0; transform: translateY(10px); }to { opacity: 1; transform: translateY(0); }}
-.hit-counter {font-family: var(--font-mono);font-size: 0.5rem;color: var(--text-muted);letter-spacing: 1px;}
+.hit-counter {text-align: right;font-family: var(--font-mono);font-size: 0.5rem;color: var(--text-muted);letter-spacing: 1px;}
 #global-hit-count {color: var(--text-muted);font-weight: bold;text-shadow: 0 0 10px rgba(78, 223, 215, 0.5);}
