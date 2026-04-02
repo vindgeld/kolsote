@@ -20,7 +20,7 @@
   ],
   "dir": "ltr",
   "lang": "en",
-  "orientation": "any",
+  "orientation": "natural",
   "display_override": [
     "window-controls-overlay",
     "standalone",
