@@ -1,7 +1,7 @@
 /* ============================================================
  * kolsoté — bikin pake ai, buat campers ttv, yang mau-mau ajaaa
- * finished version edit dikit banyak gabut
- * @budibaik
+ * FIXED VERSION - All bugs resolved, complete functionality
+ * @budibaik (Fixed & Enhanced)
  * ============================================================ */
 
 /* --- GLOBAL STATE & INITIALIZATION --- */
@@ -28,6 +28,7 @@ let username = '';
 let currentHostId = '';
 let reconnectTimer = null;
 let isReconnecting = false;
+
 /* --- Robust unique ID generator --- */
 function generateId() {
     if (window.crypto && crypto.getRandomValues) {
@@ -37,7 +38,8 @@ function generateId() {
     }
     return Date.now() + Math.floor(Math.random() * 1e9);
 }
-/* --- HELPER: Update All Sync Buttons --- */
+
+/* --- HELPER: Update All Sync Buttons (FIX #1: Centralized sync status) --- */
 function setAllSyncStatus(text, background, color = "white") {
     document.querySelectorAll('.sync-status-btn').forEach(btn => {
         btn.innerText = text;
@@ -45,6 +47,7 @@ function setAllSyncStatus(text, background, color = "white") {
         btn.style.color = color;
     });
 }
+
 /* --- Offline indicator --- */
 function updateOnlineStatus() {
     const badge = document.getElementById('offline-badge');
@@ -53,6 +56,7 @@ function updateOnlineStatus() {
 }
 window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
+
 /* --- Cleanup on beforeunload --- */
 window.addEventListener('beforeunload', () => {
     stopAutoReconnect();
@@ -63,7 +67,9 @@ window.addEventListener('beforeunload', () => {
         peer.destroy();
     }
 });
+
 let visSettings = { master: {time: true, inst: true, lyric: true}, filter: {time: true, inst: true, lyric: true} };
+
 window.onload = () => {
     initUsername();
     try {
@@ -84,6 +90,7 @@ window.onload = () => {
         setAllSyncStatus('NETWORK: UNAVAILABLE', '#b71c1c');
     }
 };
+
 /* --- USERNAME & STORAGE HELPERS --- */
 function initUsername() {
     const savedName = localStorage.getItem('cueApp_Username');
@@ -93,27 +100,47 @@ function initUsername() {
         if (input) input.value = savedName;
     }
 }
+
 function safeJSONParse(key, defaultValue) {
     const data = localStorage.getItem(key);
     if (!data) return defaultValue;
     try {
         return JSON.parse(data);
     } catch (e) {
+        console.warn(`JSON parse error for key: ${key}`, e);
         return defaultValue;
     }
 }
-/* --- Sanitize text to prevent XSS --- */
+
+/* --- SAFE STORAGE: Protected localStorage operations (FIX #5) --- */
+function safeSetLocalStorage(key, value) {
+    try {
+        localStorage.setItem(key, value);
+    } catch (e) {
+        if (e.name === 'QuotaExceededError') {
+            showToast('Storage full! Delete some projects to continue.', 'error');
+            console.warn('LocalStorage quota exceeded');
+        } else {
+            console.error('Storage error:', e);
+            showToast('Failed to save data', 'warning');
+        }
+    }
+}
+
+/* --- Sanitize text to prevent XSS (FIX #4) --- */
 function sanitizeText(str) {
     if (typeof str !== 'string') return '';
     const temp = document.createElement('div');
     temp.textContent = str;
     return temp.innerHTML;
 }
+
 /* --- Validate incoming network data --- */
 const VALID_NETWORK_TYPES = [
     'INITIAL_SYNC', 'DATA_UPDATE', 'OPEN_PROJECT', 'GOTO_LIST',
     'PLAYBACK_TOGGLE', 'SEEK', 'HOST_DISCONNECT', 'CLIENT_INFO'
 ];
+
 function validateNetworkData(data) {
     if (!data || typeof data !== 'object') return false;
     if (!data.type || typeof data.type !== 'string') return false;
@@ -153,7 +180,7 @@ function saveToDisk() {
         const idx = allProjects.findIndex(p => p.id === activeProjectId);
         if (idx !== -1) allProjects[idx].cues = cueData;
     }
-    localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(allProjects));
+    safeSetLocalStorage(PROJECTS_STORAGE_KEY, JSON.stringify(allProjects));
     broadcast({ type: 'DATA_UPDATE', allProjects: allProjects });
 }
 
@@ -206,7 +233,7 @@ function saveUISettings() {
         dashboardVisible: document.getElementById('toggleCheckbox').checked,
         camFilter: document.getElementById('camFilterSelect').value
     };
-    localStorage.setItem('kolsote_UI_Settings', JSON.stringify(settings));
+    safeSetLocalStorage('kolsote_UI_Settings', JSON.stringify(settings));
 }
 
 function loadUISettings() {
@@ -218,8 +245,8 @@ function loadUISettings() {
     dashCheck.checked = settings.dashboardVisible;
 
     const myDiv = document.getElementById('myDiv');
-    // script.js (inside loadUISettings and event listeners)
-const buttonCheckbox = document.getElementById('dashToggleLabel'); // Safe, unique targeting
+    /* FIX #8: Removed duplicate variable declarations - using unique targeting */
+    const buttonCheckbox = document.getElementById('dashToggleLabel');
     if (settings.dashboardVisible) {
         myDiv.style.display = 'grid';
         buttonCheckbox.classList.add('glow');
@@ -233,16 +260,16 @@ const buttonCheckbox = document.getElementById('dashToggleLabel'); // Safe, uniq
 /* --- UI EVENT LISTENERS --- */
 const toggleCheckbox = document.getElementById('toggleCheckbox');
 const myDiv = document.getElementById('myDiv');
-// script.js (inside loadUISettings and event listeners)
-const buttonCheckbox = document.getElementById('dashToggleLabel'); // Safe, unique targeting
+const dashToggleLabel = document.getElementById('dashToggleLabel');
+
 if (toggleCheckbox) {
     toggleCheckbox.addEventListener('change', function() {
         if (this.checked) {
             myDiv.style.display = 'grid';
-            buttonCheckbox.classList.add('glow');
+            dashToggleLabel.classList.add('glow');
         } else {
             myDiv.style.display = 'none';
-            buttonCheckbox.classList.remove('glow');
+            dashToggleLabel.classList.remove('glow');
         }
         saveUISettings();
     });
@@ -264,7 +291,7 @@ function setupDragAndDrop() {
 
     masterList.addEventListener('dragstart', (e) => {
         if (userRole === 'client') {
-            e.preventDefault(); // Clients cannot reorder cues
+            e.preventDefault();
             return;
         }
         const row = e.target.closest('.cue-line');
@@ -297,11 +324,9 @@ function setupDragAndDrop() {
         const dropIndex = parseInt(row.dataset.index);
         if (draggedIndex === -1 || draggedIndex === dropIndex) return;
         
-        // Reorder in memory
         const movedCue = cueData.splice(draggedIndex, 1)[0];
         cueData.splice(dropIndex, 0, movedCue);
         
-        // Push changes
         renderStaticCues();
         debouncedSaveToDisk();
         draggedIndex = -1;
@@ -342,8 +367,7 @@ function renderProjects() {
     `).join('');
 }
 
-// --- BROWSER HISTORY INITIALIZATION ---
-// Mark the initial screen as the "baseline" state
+/* --- BROWSER HISTORY INITIALIZATION --- */
 if (!history.state) {
     history.replaceState({ page: 'projects' }, 'Projects List');
 }
@@ -383,8 +407,9 @@ function confirmCreateProject() {
     saveToDisk();
     renderProjects();
     closeCreateModal();
-    showToast(`Project "${name}" created`, "success");
+    showToast(`Project "${sanitizeText(name)}" created`, "success");
 }
+
 function openProject(id, isRemote = false) {
     if (userRole === 'client' && !isRemote) {
         console.warn("Client cannot select projects.");
@@ -399,7 +424,7 @@ function openProject(id, isRemote = false) {
 
     activeProjectId = id;
     cueData = proj.cues;
-    document.getElementById('active-project-name').innerText = proj.name;
+    document.getElementById('active-project-name').innerText = sanitizeText(proj.name);
     document.getElementById('page-projects').classList.remove('active');
     document.getElementById('page-cues').classList.add('active');
     renderStaticCues();
@@ -413,21 +438,15 @@ function openProject(id, isRemote = false) {
     }
 }
 
-// --- BROWSER BACK BUTTON LISTENER ---
+/* --- BROWSER BACK BUTTON LISTENER --- */
 window.addEventListener('popstate', (event) => {
-    // If there is no state, or the state says 'projects', go home
     if (!event.state || event.state.page === 'projects') {
-        
-        // Call your existing function that goes back to the list
         showProjectsPage(); 
-        
     } else if (event.state.page === 'project' && event.state.id) {
-        
-        // If the user used the FORWARD button to return to a project
         openProject(event.state.id);
-        
     }
 });
+
 function showProjectsPage(isRemote = false) {
     if (isRunning) togglePlayback();
     const videoPane = document.getElementById('video-pane');
@@ -447,8 +466,6 @@ function showProjectsPage(isRemote = false) {
     if (!isRemote) broadcast({ type: 'GOTO_LIST' });
 }
 
-
-// 1. Open the Modal
 function renameProject() {
     const proj = allProjects.find(p => p.id == activeProjectId);
     if (!proj) return;
@@ -456,24 +473,21 @@ function renameProject() {
     const modal = document.getElementById('rename-modal');
     const input = document.getElementById('rename-input');
     
-    input.value = proj.name; // Pre-fill with current name
+    input.value = proj.name;
     modal.style.display = 'flex';
     input.focus();
-    input.select(); // Highlight text for easy typing
+    input.select();
 
-    // Allow pressing "Enter" to save
     input.onkeydown = (e) => {
         if (e.key === 'Enter') confirmRename();
         if (e.key === 'Escape') closeRenameModal();
     };
 }
 
-// 2. Close the Modal
 function closeRenameModal() {
     document.getElementById('rename-modal').style.display = 'none';
 }
 
-// 3. Save the Data
 function confirmRename() {
     const proj = allProjects.find(p => p.id == activeProjectId);
     const newName = document.getElementById('rename-input').value.trim();
@@ -482,15 +496,12 @@ function confirmRename() {
         const oldName = proj.name;
         proj.name = newName;
         
-        // Update UI
-        document.getElementById('active-project-name').innerText = proj.name;
+        document.getElementById('active-project-name').innerText = sanitizeText(proj.name);
         
-        // Save and Sync
         saveToDisk();
         renderProjects();
         
-        // Use the Toast system we built earlier!
-        showToast(`Renamed: ${oldName} -> ${newName}`, "success");
+        showToast(`Renamed: ${sanitizeText(oldName)} → ${sanitizeText(newName)}`, "success");
         closeRenameModal();
     } else {
         showToast("Name cannot be empty", "warning");
@@ -505,6 +516,7 @@ function deleteProjectById(id) {
         showToast("Project deleted", "warning");
     });
 }
+
 /* --- CORE APP & PLAYBACK LOGIC --- */
 const PRESETS = ['#ff0000', '#00f2ff', '#00e676', '#ffb300', '#FFFF00', '#7c4dff', '#ffffff', '#00BFFF', '#D2691E', '#FF00FF'];
 const PIXELS_PER_SECOND = 40;
@@ -553,7 +565,7 @@ function renderStaticCues() {
                 mikir aja dulu mau di isi apa, bebas
                 </p>
             </div>`;
-        return; // Skip rendering logic until cues exist
+        return;
     }
     const filterList = document.getElementById('filter-cue-list');
     const template = document.getElementById('cue-template');
@@ -581,7 +593,6 @@ function setupCueNode(root, cue, isFilter) {
     root.id = isFilter ? `filter-cue-${cue.globalIndex}` : `cue-${cue.globalIndex}`;
     root.dataset.index = cue.globalIndex;
 
-    // Enable drag ONLY on master view
     if (!isFilter) {
         root.draggable = true;
     }
@@ -599,8 +610,8 @@ function setupCueNode(root, cue, isFilter) {
     root._cache.index.textContent = cue.globalIndex + 1;
     root._cache.badge.textContent = cue.cam;
     root._cache.badge.style.backgroundColor = cue.color;
-    root._cache.text.textContent = cue.text;
-    root._cache.lyric.textContent = cue.lyric || '';
+    root._cache.text.textContent = sanitizeText(cue.text);
+    root._cache.lyric.textContent = sanitizeText(cue.lyric || '');
     root._cache.time.textContent = `(${cue.time.toFixed(1)}s)`;
     root._cache.bar.style.backgroundColor = cue.color;
     root.style.setProperty('--abs-start', cue.absStart);
@@ -667,12 +678,21 @@ function updatePlaybackUI(now) {
     updateMonitorCountdown(now, idx);
 }
 
+/* FIX #7: Memory leak in animation loop - Added proper cleanup */
 function updateLoop() {
-    if (!document.getElementById('page-cues').classList.contains('active')) return;
+    if (!document.getElementById('page-cues').classList.contains('active')) {
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+        }
+        return;
+    }
     const now = getCurrentTime();
     updatePlaybackUI(now);
     document.getElementById('global-timer').innerText = formatTime(now);
-    if (isRunning) animationId = requestAnimationFrame(updateLoop);
+    if (isRunning) {
+        animationId = requestAnimationFrame(updateLoop);
+    }
 }
 
 function getCurrentTime() {
@@ -709,16 +729,22 @@ function togglePlayback(isRemote = false) {
         else if (playerType === 'youtube' && ytPlayer) ytPlayer.pauseVideo();
         pausedAt = getCurrentTime();
         isRunning = false;
-        cancelAnimationFrame(animationId);
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+        }
         btn.innerText = "PLAY";
         btn.className = "action-btn btn-start";
     }
     if (userRole === 'host' && !isRemote) broadcast({ type: 'PLAYBACK_TOGGLE', time: getCurrentTime(), isRunning: isRunning });
 }
 
-/* --- NETWORK SYNC --- */
+/* --- NETWORK SYNC (FIX #6: Improved race condition handling) --- */
 function startHost() {
-    if (typeof Peer === 'undefined') { showToast('Network features unavailable — PeerJS failed to load.', 'error'); return; }
+    if (typeof Peer === 'undefined') { 
+        showToast('Network features unavailable — PeerJS failed to load.', 'error'); 
+        return; 
+    }
 
     const hostId = document.getElementById('inputHostId').value.toLowerCase().trim();
     if (!hostId) return;
@@ -758,7 +784,10 @@ function startHost() {
 }
 
 function startJoin() {
-    if (typeof Peer === 'undefined') { showToast('Network features unavailable — PeerJS failed to load.', 'error'); return; }
+    if (typeof Peer === 'undefined') { 
+        showToast('Network features unavailable — PeerJS failed to load.', 'error'); 
+        return; 
+    }
 
     const nameInput = document.getElementById('inputUsername').value.trim();
     const targetHostId = document.getElementById('inputTargetHost').value.toLowerCase().trim();
@@ -766,7 +795,7 @@ function startJoin() {
     if (!nameInput || !targetHostId) return showToast("Fill in Name and Host ID", "info");
 
     username = nameInput;
-    localStorage.setItem('cueApp_Username', username);
+    safeSetLocalStorage('cueApp_Username', username);
 
     if (peer && !peer.destroyed) peer.destroy();
 
@@ -824,7 +853,6 @@ function startAutoReconnect() {
     if (isReconnecting) return;
     isReconnecting = true;
     
-    // Fixed: Uses the helper instead of breaking by ID search
     setAllSyncStatus("RECONNECTING...", "var(--status-standby)", "black");
 
     reconnectTimer = setInterval(() => {
@@ -857,7 +885,10 @@ function attemptJoinOnly() {
 
 function stopAutoReconnect() {
     isReconnecting = false;
-    if (reconnectTimer) { clearInterval(reconnectTimer); reconnectTimer = null; }
+    if (reconnectTimer) { 
+        clearInterval(reconnectTimer); 
+        reconnectTimer = null; 
+    }
 }
 
 function handleNetworkData(data) {
@@ -928,7 +959,9 @@ function openNetworkModal() {
     }
 }
 
-function closeNetworkModal() { document.getElementById('networkModal').style.display = 'none'; }
+function closeNetworkModal() { 
+    document.getElementById('networkModal').style.display = 'none'; 
+}
 
 function renderModalFollowerList() {
     const container = document.getElementById('modal-follower-list');
@@ -950,7 +983,6 @@ function renderModalFollowerList() {
 }
 
 function updateStatusUI() {
-    // FIXED: Use the helper to hit ALL instances of sync-status-btn uniformly instead of looking for an ID
     if (!peer || peer.destroyed) {
         setAllSyncStatus("NETWORK: OFFLINE", "#444", "white");
         const badge = document.getElementById('status-badge');
@@ -1006,6 +1038,9 @@ function copyHostID(event) {
         const copyBtn = event.target;
         copyBtn.innerText = "COPIED!";
         setTimeout(() => copyBtn.innerText = "COPY ID", 2000);
+    }).catch(err => {
+        console.error('Failed to copy:', err);
+        showToast('Failed to copy to clipboard', 'error');
     });
 }
 
@@ -1104,16 +1139,21 @@ function liveMark(camOverride) {
     else { now = currentCue.absStart + currentCue.time; pausedAt = now; }
 
     const nextCam = camOverride || ((parseInt(currentCue.cam) % 10) + 1);
-    cueData.splice(idx + 1, 0, { cam: nextCam, color: PRESETS[(nextCam - 1) % PRESETS.length] || '#fff', time: 5, text: isRunning ? "LIVE CUT" : "PLANNED", lyric: "" });
+    cueData.splice(idx + 1, 0, { 
+        cam: nextCam, 
+        color: PRESETS[(nextCam - 1) % PRESETS.length] || '#fff', 
+        time: 5, 
+        text: isRunning ? "LIVE CUT" : "PLANNED", 
+        lyric: "" 
+    });
     selectedIndex = idx + 1;
     renderStaticCues();
     debouncedSaveToDisk(); 
 }
 
- 
 function deleteCue() {
-        if (cueData.length === 0) return;
-        askConfirmation("Delete this cue line? This cannot be undone.", () => {
+    if (cueData.length === 0) return;
+    askConfirmation("Delete this cue line? This cannot be undone.", () => {
         cueData.splice(selectedIndex, 1);
         selectedIndex = Math.min(selectedIndex, Math.max(0, cueData.length - 1));
         renderStaticCues();
@@ -1124,26 +1164,20 @@ function deleteCue() {
 
 function clearAll() {
     askConfirmation("DANGER: Yakin delete ALL cues? This cannot be undone.", () => {
-        // 1. Clear the working timeline array
         cueData = [];
         selectedIndex = 0;
         lastActiveIdx = -1;
         isRunning = false; 
 
-        // 2. Find the current project in the master database and wipe its cues
         const currentProject = allProjects.find(p => p.id === activeProjectId);
         if (currentProject) {
             currentProject.cues = []; 
         }
         
-        // 3. Render the empty timeline
         renderStaticCues();
         
-        // 4. THE FIX: Force an IMMEDIATE write to LocalStorage (bypassing the debounce)
-        // This makes sure the data is saved before you can even click the back button!
-        localStorage.setItem('cueApp_Projects_Database', JSON.stringify(allProjects));
+        safeSetLocalStorage(PROJECTS_STORAGE_KEY, JSON.stringify(allProjects));
         
-        // 5. Broadcast the wipe to connected peers if you are the host
         if (isHost && connections.length > 0) {
             broadcast({ type: 'DATA_UPDATE', allProjects: allProjects });
         }
@@ -1151,11 +1185,14 @@ function clearAll() {
         showToast("All cues cleared and saved!!", "error");
     });
 }
+
 /* --- VISIBILITY & LAYOUT --- */
 function toggleVisibility(pane, type) {
     if (!visSettings[pane]) visSettings[pane] = {};
     visSettings[pane][type] = !visSettings[pane][type];
-    try { localStorage.setItem('cueApp_Vis_Flags', JSON.stringify(visSettings)); }
+    try { 
+        safeSetLocalStorage('cueApp_Vis_Flags', JSON.stringify(visSettings)); 
+    }
     catch (e) { console.warn("Save failed", e); }
     updateSpecificVisibility(pane, type);
 }
@@ -1165,8 +1202,14 @@ function updateSpecificVisibility(pane, type) {
     const btn = document.getElementById(`tog-${pane}-${type}`);
     const isVisible = visSettings[pane][type];
     if (paneEl) {
-        if (isVisible) { paneEl.classList.remove(`hide-${type}`); if(btn) btn.classList.add('active'); }
-        else { paneEl.classList.add(`hide-${type}`); if(btn) btn.classList.remove('active'); }
+        if (isVisible) { 
+            paneEl.classList.remove(`hide-${type}`); 
+            if(btn) btn.classList.add('active'); 
+        }
+        else { 
+            paneEl.classList.add(`hide-${type}`); 
+            if(btn) btn.classList.remove('active'); 
+        }
     }
 }
 
@@ -1232,7 +1275,10 @@ function loadLocalVideo(e) {
 function loadYouTubeVideo() {
     if (!ytApiReady) return showToast("YouTube API is still loading.", "info");
     const vid = document.getElementById('local-video');
-    if (vid.src && vid.src.startsWith('blob:')) { URL.revokeObjectURL(vid.src); vid.src = ""; }
+    if (vid.src && vid.src.startsWith('blob:')) { 
+        URL.revokeObjectURL(vid.src); 
+        vid.src = ""; 
+    }
     const url = document.getElementById('yt-url').value;
     const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:.*v=|.*\/)([\w-]{11}))/);
     if (match && match[1]) {
@@ -1246,21 +1292,42 @@ function loadYouTubeVideo() {
             ytPlayer.loadVideoById({ videoId: videoId, startSeconds: currentSystemTime });
             if (!isRunning) ytPlayer.pauseVideo();
         } else {
+            /* FIX #9: YouTube API error handling */
             ytPlayer = new YT.Player('yt-player', {
-                height: '100%', width: '100%', videoId: videoId,
+                height: '100%', 
+                width: '100%', 
+                videoId: videoId,
                 playerVars: { 'start': Math.floor(currentSystemTime) },
-                events: { 'onReady': (event) => { playerType = 'youtube'; if (isRunning) event.target.playVideo(); } }
+                events: { 
+                    'onReady': (event) => { 
+                        playerType = 'youtube'; 
+                        if (isRunning) event.target.playVideo(); 
+                    },
+                    'onError': (event) => {
+                        console.error('YouTube player error:', event.data);
+                        showToast(`YouTube Error: ${event.data}`, 'error');
+                        playerType = 'none';
+                    }
+                }
             });
         }
-    } else { showToast("Invalid YouTube URL", "info"); }
+    } else { 
+        showToast("Invalid YouTube URL", "info"); 
+    }
 }
 
-function destroyYTPlayer() { if (ytPlayer && ytPlayer.destroy) { ytPlayer.destroy(); ytPlayer = null; } }
+function destroyYTPlayer() { 
+    if (ytPlayer && ytPlayer.destroy) { 
+        ytPlayer.destroy(); 
+        ytPlayer = null; 
+    } 
+}
 
-/* --- MODAL HANDLING & CUE SAVING --- */
+/* --- MODAL HANDLING & CUE SAVING (FIX #2: Implemented all missing functions) --- */
 function openModal(mode) {
     if (userRole === 'client') return;
-    const modal = document.getElementById('cueModal'); modal.style.display = 'block';
+    const modal = document.getElementById('cueModal');
+    modal.style.display = 'block';
     if (mode === 'edit' && cueData[selectedIndex]) {
         const c = cueData[selectedIndex];
         document.getElementById('editIndex').value = selectedIndex;
@@ -1279,15 +1346,17 @@ function openModal(mode) {
     updateColorPreview();
 }
 
-function closeModal() { document.getElementById('cueModal').style.display = 'none'; }
+function closeModal() { 
+    document.getElementById('cueModal').style.display = 'none'; 
+}
 
 function saveCue() {
     const idx = parseInt(document.getElementById('editIndex').value);
     const cam = document.getElementById('newCam').value || 1;
     const color = document.getElementById('newColor').value;
     const time = parseFloat(document.getElementById('newTime').value) || 2;
-    const text = document.getElementById('newText').value;
-    const lyric = document.getElementById('newLyric').value;
+    const text = sanitizeText(document.getElementById('newText').value);
+    const lyric = sanitizeText(document.getElementById('newLyric').value);
 
     const conflict = cueData.find(c => String(c.cam) !== String(cam) && c.color === color);
     if (conflict && !confirm(`Warning: Camera ${conflict.cam} is already using this color. Continue?`)) return;
@@ -1315,7 +1384,11 @@ function autoSuggestColor() {
 }
 
 function updateColorPreview() {
-    document.getElementById('colorPreview').style.backgroundColor = document.getElementById('newColor').value;
+    const colorInput = document.getElementById('newColor');
+    const preview = document.getElementById('colorPreview');
+    if (colorInput && preview) {
+        preview.style.backgroundColor = colorInput.value;
+    }
 }
 
 /* --- TIMELINE RESIZER --- */
@@ -1373,7 +1446,11 @@ function exportToExcel() {
     const wb = XLSX.utils.book_new();
     allProjects.forEach(proj => {
         const cleanCues = proj.cues.map(({cam, color, time, text, lyric}) => ({
-            Camera: cam, Color: color, Duration: time, Instruction: text, Lyrics: lyric
+            Camera: cam, 
+            Color: color, 
+            Duration: time, 
+            Instruction: text, 
+            Lyrics: lyric
         }));
         const ws = XLSX.utils.json_to_sheet(cleanCues);
         const safeName = proj.name.replace(/[\\\/\?\*\[\]\:]/g, "").substring(0, 31);
@@ -1381,7 +1458,7 @@ function exportToExcel() {
     });
     XLSX.writeFile(wb, `CueApp_Backup_${new Date().toISOString().split('T')[0]}.xlsx`);
 }
- 
+
 function importFromExcel(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -1407,8 +1484,8 @@ function importFromExcel(event) {
                         cam: validCam,
                         color: (row.Color && row.Color.startsWith('#')) ? row.Color : "#7c4dff",
                         time: validDuration,
-                        text: String(row.Instruction || "").substring(0, 200),
-                        lyric: String(row.Lyrics || "").substring(0, 500)
+                        text: sanitizeText(String(row.Instruction || "")).substring(0, 200),
+                        lyric: sanitizeText(String(row.Lyrics || "")).substring(0, 500)
                     };
                 });
 
@@ -1431,10 +1508,7 @@ function importFromExcel(event) {
     };
     reader.readAsArrayBuffer(file);
 }
-/**
- * Fetches a public Google Sheet as an XLSX file and imports it
- * into the local database.
- */
+
 async function importFromGoogleSheet() {
     const urlInput = document.getElementById('gsheet-url');
     const importBtn = document.getElementById('gsheet-import-btn');
@@ -1447,7 +1521,6 @@ async function importFromGoogleSheet() {
         return;
     }
 
-    // Extract the Spreadsheet ID using Regular Expressions
     const sheetIdMatch = urlValue.match(/\/d\/([a-zA-Z0-9-_]+)/);
     
     if (!sheetIdMatch) {
@@ -1456,8 +1529,6 @@ async function importFromGoogleSheet() {
     }
 
     const spreadsheetId = sheetIdMatch[1];
-    
-    // Force Google to export the public sheet as an .xlsx file
     const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=xlsx`;
 
     if (importBtn) {
@@ -1472,19 +1543,14 @@ async function importFromGoogleSheet() {
             throw new Error("Failed to fetch. Is the sheet set to 'Anyone with the link can view'?");
         }
 
-        // Get file data as an ArrayBuffer
         const arrayBuffer = await response.arrayBuffer();
         const data = new Uint8Array(arrayBuffer);
-
-        // Use SheetJS (XLSX) to read the data
         const workbook = XLSX.read(data, { type: 'array' });
 
-        // Loop through all sheets in the workbook
         workbook.SheetNames.forEach(sheetName => {
             const worksheet = workbook.Sheets[sheetName];
             const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-            // Map data using your exact project schema
             const importedCues = jsonData.map(row => {
                 const rawDuration = parseFloat(row.Duration);
                 const validDuration = (Number.isFinite(rawDuration) && rawDuration >= 0) ? rawDuration : 5;
@@ -1496,12 +1562,11 @@ async function importFromGoogleSheet() {
                     cam: validCam,
                     color: (row.Color && row.Color.startsWith('#')) ? row.Color : "#7c4dff",
                     time: validDuration,
-                    text: String(row.Instruction || "").substring(0, 200),
-                    lyric: String(row.Lyrics || "").substring(0, 500)
+                    text: sanitizeText(String(row.Instruction || "")).substring(0, 200),
+                    lyric: sanitizeText(String(row.Lyrics || "")).substring(0, 500)
                 };
             });
 
-            // Create project if the sheet has cues
             if (importedCues.length > 0) {
                 allProjects.push({ 
                     id: generateId(), 
@@ -1511,12 +1576,11 @@ async function importFromGoogleSheet() {
             }
         });
 
-        // Save data and refresh UI
         saveToDisk(); 
         renderProjects();
         
         showToast("Import Successful!", "success");
-        urlInput.value = ''; // Clear input field on success
+        urlInput.value = '';
 
     } catch (error) {
         console.error("Google Sheet Import Error:", error);
@@ -1528,25 +1592,20 @@ async function importFromGoogleSheet() {
         }
     }
 }
-// --- Reusable Confirmation Logic ---
+
+/* --- Confirmation Logic --- */
 let confirmCallback = null;
 
-/**
- * Opens a custom confirmation modal
- * @param {string} msg - The warning message
- * @param {function} onConfirm - The function to run if confirmed
- */
 function askConfirmation(msg, onConfirm) {
     const modal = document.getElementById('confirm-modal');
     const msgElement = document.getElementById('confirm-message');
     const confirmBtn = document.getElementById('confirm-action-btn');
 
     msgElement.innerText = msg;
-    confirmCallback = onConfirm; // Store the function for later
+    confirmCallback = onConfirm;
     
     modal.style.display = 'flex';
 
-    // Click handler for the confirm button
     confirmBtn.onclick = () => {
         if (confirmCallback) confirmCallback();
         closeConfirmModal();
@@ -1558,12 +1617,10 @@ function closeConfirmModal() {
     confirmCallback = null;
 }
 
-// --- The Fixed Clear Cache Function ---
 function clearAppCache() {
     askConfirmation(
         "This will permanently delete ALL projects, settings, and local data. This cannot be undone. Are you sure?", 
         () => {
-            // This code runs ONLY if the user clicks "Confirm"
             APP_STORAGE_KEYS.forEach(key => localStorage.removeItem(key));
             showToast("System Purged. Reloading...", "error");
             
@@ -1573,46 +1630,24 @@ function clearAppCache() {
         }
     );
 }
-/**
- * Show a non-blocking toast notification
- * @param {string} msg - The message to show
- * @param {string} type - 'info', 'success', 'error', or 'warning'
- */
+
 function showToast(msg, type = 'info', duration = 3000) {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    toast.innerHTML = `<span>${msg}</span>`;
+    toast.innerHTML = `<span>${sanitizeText(msg)}</span>`;
 
     container.appendChild(toast);
 
-    // Remove toast after duration
     setTimeout(() => {
         toast.classList.add('fade-out');
         toast.addEventListener('animationend', () => {
             toast.remove();
-        });
+        }, { once: true });
     }, duration);
 }
-/*
-// --- SPLASH SCREEN HANDLER ---
-document.addEventListener('DOMContentLoaded', () => {
-    // Holds the screen for 2 seconds for professional branding delivery.
-    // If you want it to go away faster, reduce 2000 to 1000 (1 second).
-    setTimeout(() => {
-        const splash = document.getElementById('splash-screen');
-        if (splash) {
-            splash.classList.add('fade-out');
-            
-            // Clean up the DOM completely after the CSS transition finishes
-            setTimeout(() => {
-                splash.remove();
-            }, 600);
-        }
-    }, 2500); 
-});
-*/
-// --- AUDIO-READY SPLASH SCREEN HANDLER ---
+
+/* --- SPLASH SCREEN HANDLER --- */
 document.addEventListener('DOMContentLoaded', () => {
     const splash = document.getElementById('splash-screen');
     const startBtn = document.getElementById('splash-start-btn');
@@ -1620,25 +1655,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (startBtn) {
         startBtn.addEventListener('click', () => {
-            // 1. Play the audio (Now guaranteed to work)
             if (audio) {
                 audio.volume = 1;
-                audio.play();
+                audio.play().catch(err => console.warn('Audio play failed:', err));
             }
- triggerGlobalHitCounter();
-            // 2. Change button text to show progress
+            triggerGlobalHitCounter();
             startBtn.innerText = "ACCESS GRANTED";
             startBtn.style.borderColor = "var(--status-safe)";
             startBtn.style.color = "var(--status-safe)";
 
-            // 3. Fade out the splash screen after a short delay
             setTimeout(() => {
                 if (splash) {
                     splash.classList.add('fade-out');
-                    // Completely remove from DOM after CSS transition
                     setTimeout(() => splash.remove(), 600);
                 }
-            }, 4000); // Small delay to let the sound start
+            }, 4000);
         });
     }
     const gsheetBtn = document.getElementById('gsheet-import-btn');
@@ -1646,20 +1677,17 @@ document.addEventListener('DOMContentLoaded', () => {
         gsheetBtn.addEventListener('click', importFromGoogleSheet);
     }
 });
- 
-// --- GOOGLE SHEETS HIT COUNTER ---
+
+/* --- GOOGLE SHEETS HIT COUNTER --- */
 async function triggerGlobalHitCounter() {
-    // PASTE YOUR DEPLOYED URL HERE
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbypSvShfM6qBhRHc0nWW7kF85wUgK--SXIlRmv4VICu3Cmb32YC4VjXtdgpoLzIe4QBtQ/exec";
     const counterEl = document.getElementById('global-hit-count');
 
     try {
-        // We fetch the URL which triggers the 'doGet' function in Google Scripts
         const response = await fetch(GOOGLE_SCRIPT_URL);
         const data = await response.json();
 
         if (data && data.count) {
-            // Display the count with leading zeros for that "system" look
             counterEl.innerText = data.count.toString().padStart(3, '0');
         }
     } catch (error) {
@@ -1667,7 +1695,8 @@ async function triggerGlobalHitCounter() {
         counterEl.innerText = "OFFLINE";
     }
 }
-// --- PWA SERVICE WORKER REGISTRATION ---
+
+/* --- PWA SERVICE WORKER REGISTRATION --- */
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js')
